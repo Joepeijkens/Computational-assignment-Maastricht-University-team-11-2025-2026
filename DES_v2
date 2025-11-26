@@ -1,1 +1,101 @@
+install.packages("tidyverse")
+install.packages("lubridate")
 
+library(tidyverse)
+library(lubridate)
+
+#parameters to test the code
+days <- 100
+length_slot1 <- 0.5
+length_slot2 <- 0.75
+begin_day <- 8.0
+end_day <- 17.0
+hours_day <- end_day - begin_day
+
+#for this we need the statistic analysis
+arrival_rate_patient1 <- 12
+arrival_rate_patient2 <- 8
+duration_patient1_mean <- 0.45
+duration_patient2_mean <- 0.65
+duration_patient1_sd <- 0.1
+duration_patient2_sd <- 0.2
+
+set.seed(42)
+
+#simulation for patients calling
+call_simulation <- function(type, lambda, days){
+  
+  #number of patients is poisson distributed
+  n_patients <- rpois(1, lambda * days)
+  
+  #simulation for when patients call
+  #creates for eacht patient a fraction, later rounded down, which represents the day on which they call
+  call_day_frac <- runif(n_patients, 1, days+1)
+  call_day <- floor(call_day_frac)
+  call_hour <- (call_day_frac - call_day)*9+8 #converts the fraction of the day to the hour of calling between 8.00 and 17.00
+  
+  #create an overview of when patients called
+  tibble(
+    PatientID = paste0(type, "_", 1:n_patients),
+    Patient_type = type,
+    Day_called = call_day,
+    Hour_called = call_hour
+  )
+}
+
+#runs simulation twice, for both types
+arrivals_patient1 <- call_simulation("Type1", arrival_rate_patient1, days)
+arrivals_patient2 <- call_simulation("Type2", arrival_rate_patient2, days)
+
+#creates one big table with all patients ordered chronological
+total_arrivals <- bind_rows(arrivals_patient1, arrivals_patient2)%>%
+  arrange(Day_called, Hour_called)
+
+#in this part we schedule the patients
+schedule <- function(arrivals, length_slot, MRI){
+  
+  #this vector keeps track of how much of the day is already used by booked appointments
+  current_used <- rep(0, days + 100) #we allow for a backlog to be scheduled after the days that we initially run the simulation
+  
+  #stores the schedule for all patients
+  result <- vector("list", nrow(arrivals))
+  
+  #sets the first possible day that each patient can be scheduled the day after the patient called
+  for(i in seq_len(nrow(arrivals))){
+    patient <- arrivals[i, ]
+    next_day <- patient$Day_called +1
+    
+    #checks if we can schedule a patient on the day after calling without exceeding 17.00, otherwise it moves to the day after that
+    repeat{
+      if((current_used[next_day] + length_slot) <= hours_day){
+        
+        start <- begin_day + current_used[next_day]
+        current_used[next_day] <- current_used[next_day] + length_slot
+        
+        result[[i]]<- tibble(
+          PatientID = patient$PatientID,
+          Patient_type = patient$Type,
+          Day_called = patient$Day_called,
+          Day_treatment = next_day,
+          Start_time_treatment = start,
+          End_time_treatment = start + length_slot,
+          Length_Slot = length_slot,
+          MRI = MRI
+        )
+        break
+        
+      }
+      else{
+        next_day <- next_day +1
+      }
+    }
+  }
+  bind_rows(result)
+}
+
+MRI1_schedule <- schedule(arrivals_patient1, length_slot1, "MRI1")
+MRI2_schedule <- schedule(arrivals_patient2, length_slot2, "MRI2")
+
+#chronological table of scheduled patients on both MRI's
+complete_schedule <- bind_rows(MRI1_schedule, MRI2_schedule)%>%
+  arrange(MRI, Day_treatment, Start_time_treatment)
