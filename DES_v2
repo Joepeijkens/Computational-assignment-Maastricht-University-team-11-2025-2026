@@ -99,3 +99,15 @@ MRI2_schedule <- schedule(arrivals_patient2, length_slot2, "MRI2")
 #chronological table of scheduled patients on both MRI's
 complete_schedule <- bind_rows(MRI1_schedule, MRI2_schedule)%>%
   arrange(MRI, Day_treatment, Start_time_treatment)
+
+#create the durations of eacht patient from the normal distribution
+data <- schedule %>%
+  mutate(
+    duration = case_when(
+      Patient_type == "Type1" ~ rnorm(n(), duration_patient1_mean, duration_patient1_sd),
+      Patient_type == "Type2" ~ rnorm(n(), duration_patient2_mean, duration_patient2_sd)
+    ),
+    #set a lowerbound for the duration since we do not allow the duration to be negative or zero
+    duration = pmax(0.1, duration)
+  )
+
