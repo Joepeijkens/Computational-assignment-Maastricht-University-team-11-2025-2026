@@ -1,0 +1,168 @@
+install.packages("tidyverse")
+install.packages("lubridate")
+
+library(tidyverse)
+library(lubridate)
+
+#parameters to test the code
+days <- 100
+length_slot1 <- 0.5
+length_slot2 <- 0.75
+begin_day <- 8.0
+end_day <- 17.0
+hours_day <- end_day - begin_day
+
+#for this we need the statistic analysis
+arrival_rate_patient1 <- 12
+arrival_rate_patient2 <- 8
+duration_patient1_mean <- 0.45
+duration_patient2_mean <- 0.65
+duration_patient1_sd <- 0.1
+duration_patient2_sd <- 0.2
+
+set.seed(42)
+
+#simulation for patients calling
+call_simulation <- function(type, lambda, days){
+  
+  #number of patients is poisson distributed
+  n_patients <- rpois(1, lambda * days)
+  
+  #simulation for when patients call
+  call_day_frac <- runif(n_patients, 1, days+1)
+  call_day <- floor(call_day_frac)
+  call_hour <- (call_day_frac - call_day)*9+8 
+  
+  tibble(
+    PatientID = paste0(type, "_", 1:n_patients),
+    Patient_type = type,
+    Day_called = call_day,
+    Hour_called = call_hour
+  )
+}
+
+#runs simulation twice, for both types
+arrivals_patient1 <- call_simulation("Type1", arrival_rate_patient1, days)
+arrivals_patient2 <- call_simulation("Type2", arrival_rate_patient2, days)
+
+#NEW: For the pooled model, we combine EVERYONE into one queue immediately
+#processed first-come-first-served based on when they called
+total_arrivals_pooled <- bind_rows(arrivals_patient1, arrivals_patient2) %>%
+  arrange(Day_called, Hour_called)
+
+#NEW: Pooled Scheduling Function
+schedule_pooled <- function(arrivals, slot1, slot2){
+  
+  #implement two trackers, one for each machine
+  current_used_mri1 <- rep(0, days + 100)
+  current_used_mri2 <- rep(0, days + 100)
+  
+  result <- vector("list", nrow(arrivals))
+  
+  for(i in seq_len(nrow(arrivals))){
+    patient <- arrivals[i, ]
+    
+    #determine how long this specific patient takes
+    # (Type 1 is always 0.5, Type 2 is always 0.75, regardless of machine)
+    needed_slot <- if(patient$Patient_type == "Type1") slot1 else slot2
+    
+    #helper function to find the earliest slot on a specific machine tracker
+    find_earliest_slot <- function(tracker, start_search_day, duration) {
+      check_day <- start_search_day
+      repeat {
+        if((tracker[check_day] + duration) <= hours_day) {
+          return(list(day = check_day, start_time = begin_day + tracker[check_day]))
+        }
+        check_day <- check_day + 1
+      }
+    }
+    
+    #best option on MRI 1
+    option1 <- find_earliest_slot(current_used_mri1, patient$Day_called + 1, needed_slot)
+    #best option on MRI 2
+    option2 <- find_earliest_slot(current_used_mri2, patient$Day_called + 1, needed_slot)
+    
+    #compare and pick the winner (We prefer the earliest day. If days are equal, we prefer the earliest time.)
+    use_MRI1 <- FALSE
+    
+    if (option1$day < option2$day) {
+      use_MRI1 <- TRUE
+    } else if (option1$day == option2$day && option1$start_time <= option2$start_time) {
+      use_MRI1 <- TRUE
+    } else {
+      use_MRI1 <- FALSE
+    }
+    
+    #book the appointment
+    if(use_MRI1) {
+      chosen_MRI <- "MRI1"
+      chosen_day <- option1$day
+      chosen_start <- option1$start_time
+      #update MRI 1 tracker
+      current_used_mri1[chosen_day] <- current_used_mri1[chosen_day] + needed_slot
+    } else {
+      chosen_MRI <- "MRI2"
+      chosen_day <- option2$day
+      chosen_start <- option2$start_time
+      #update MRI 2 tracker
+      current_used_mri2[chosen_day] <- current_used_mri2[chosen_day] + needed_slot
+    }
+    
+    result[[i]] <- tibble(
+      PatientID = patient$PatientID,
+      Patient_type = patient$Patient_type,
+      Day_called = patient$Day_called,
+      Day_treatment = chosen_day,
+      Start_time_treatment = chosen_start,
+      End_time_treatment = chosen_start + needed_slot,
+      Length_Slot = needed_slot,
+      MRI = chosen_MRI
+    )
+  }
+  bind_rows(result)
+}
+
+# Run the pooled schedule
+complete_schedule_pooled <- schedule_pooled(total_arrivals_pooled, length_slot1, length_slot2)
+
+# This part is identical to the previous model because once scheduled,the machines operate independently.
+final_data_pooled <- complete_schedule_pooled %>%
+  arrange(MRI, Day_treatment, Start_time_treatment) %>%
+  group_by(MRI, Day_treatment) %>%
+  mutate(
+    # Generate random durations
+    duration = case_when(
+      Patient_type == "Type1" ~ rnorm(n(), duration_patient1_mean, duration_patient1_sd),
+      Patient_type == "Type2" ~ rnorm(n(), duration_patient2_mean, duration_patient2_sd)
+    ),
+    duration = pmax(0.1, duration),
+    
+    #calculate actual end time using accumulation (capture "ripple effect")
+    Actual_end_time = purrr::accumulate2(
+      .x = Start_time_treatment, 
+      .y = duration, 
+      .f = function(prev_end, start, dur) max(prev_end, start) + dur,
+      .init = 0
+    )[-1], 
+    
+    # Back-calculate Actual Start Time
+    Actual_Start_Time = Actual_End_Time - duration,
+    
+    # Calculate KPIs
+    Waiting_Room_Delay = Actual_Start_Time - Start_time_treatment,
+    Is_Overtime = Actual_End_Time > 17.0,
+    Overtime_Amount = pmax(0, Actual_End_Time - 17.0),
+    Access_Time_Days = Day_treatment - Day_called
+  ) %>%
+  ungroup()
+
+# Calculate Daily Stats
+daily_performance_pooled <- final_data_pooled %>%
+  group_by(MRI, Day_treatment) %>%
+  summarise(
+    Total_Work_Hours = sum(duration),
+    Last_Patient_Finish = max(Actual_End_Time),
+    Daily_Overtime = pmax(0, Last_Patient_Finish - 17.0),
+    .groups = "drop"
+  )
+
