@@ -122,10 +122,10 @@ schedule_pooled <- function(arrivals, slot1, slot2){
   bind_rows(result)
 }
 
-# Run the pooled schedule
+#run the pooled schedule
 complete_schedule_pooled <- schedule_pooled(total_arrivals_pooled, length_slot1, length_slot2)
 
-# This part is identical to the previous model because once scheduled,the machines operate independently.
+#this part is almost identical to the previous model because once scheduled, the machines operate independently.
 final_data_pooled <- complete_schedule_pooled %>%
   arrange(MRI, Day_treatment, Start_time_treatment) %>%
   group_by(MRI, Day_treatment) %>%
@@ -136,33 +136,44 @@ final_data_pooled <- complete_schedule_pooled %>%
       Patient_type == "Type2" ~ rnorm(n(), duration_patient2_mean, duration_patient2_sd)
     ),
     duration = pmax(0.1, duration),
-    
-    #calculate actual end time using accumulation (capture "ripple effect")
-    Actual_end_time = purrr::accumulate2(
-      .x = Start_time_treatment, 
-      .y = duration, 
-      .f = function(prev_end, start, dur) max(prev_end, start) + dur,
-      .init = 0
-    )[-1], 
-    
-    # Back-calculate Actual Start Time
-    Actual_Start_Time = Actual_End_Time - duration,
-    
-    # Calculate KPIs
-    Waiting_Room_Delay = Actual_Start_Time - Start_time_treatment,
-    Is_Overtime = Actual_End_Time > 17.0,
-    Overtime_Amount = pmax(0, Actual_End_Time - 17.0),
-    Access_Time_Days = Day_treatment - Day_called
-  ) %>%
-  ungroup()
 
-# Calculate Daily Stats
-daily_performance_pooled <- final_data_pooled %>%
-  group_by(MRI, Day_treatment) %>%
-  summarise(
-    Total_Work_Hours = sum(duration),
-    Last_Patient_Finish = max(Actual_End_Time),
-    Daily_Overtime = pmax(0, Last_Patient_Finish - 17.0),
-    .groups = "drop"
+#loop through row by row to carry delays forward
+for(i in 1:nrow(data)) {
+  
+  #check if this is a "Reset" point.
+  # It is a reset if: 1. It's the very first row, 2. It's a different MRI machine than the row before or 3. It's a different day than the row before
+  if(i == 1 || data$MRI[i] != data$MRI[i-1] || data$Day_treatment[i] != data$Day_treatment[i-1]) {
+    
+    #no delay carry-over: They start exactly at their scheduled time
+    data$Actual_start_time[i] <- data$Start_time_treatment[i]
+  } else {
+    # The ripple effect: They start at the LATER of: A) Their scheduled time (if the previous patient finished early) or B) The previous patient's finish time (if the previous patient ran late)
+    data$Actual_start_time[i] <- max(data$Start_time_treatment[i], data$Actual_end_time[i-1])
+  }
+  
+  #calculate finish time based on the determined start time + actual duration
+  data$Actual_end_time[i] <- data$Actual_start_time[i] + data$duration[i]
+}
+
+#calculate final perfomance metrics
+final_data <- data %>%
+  mutate(
+    #calculate waiting room delay (difference between actual start and scheduled start)
+    Waiting_room_delay = Actual_start_time - Start_time_treatment,
+    #check for overtime (did they finish after 17.00?)
+    Is_overtime = Actual_end_time > 17.0,
+    #calculate how many hours of overtime occurred
+    Overtime_amount = pmax(0, Actual_end_time - 17.0),
+    #number of days the patient waited for the appointment
+    Access_time_days = Day_treatment - Day_called
   )
 
+#calculate daily stats
+daily_performance <- final_data %>%
+  group_by(MRI, Day_treatment) %>% 
+  summarise(
+    Total_work_hours = sum(duration),
+    Last_patient_finish = max(Actual_end_time),
+    Daily_overtime = pmax(0, Last_patient_finish - 17.0), 
+    .groups = "drop"
+  )
