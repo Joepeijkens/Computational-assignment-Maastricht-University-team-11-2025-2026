@@ -119,42 +119,42 @@ data <- data_prelim %>%
   arrange(MRI, Day_treatment, Start_time_treatment)
 
 #initialize columns for actual start and end times
-data$Actual_Start_Time <- data$Start_time_treatment
-data$Actual_End_Time <- 0 
+data$Actual_start_time <- data$Start_time_treatment
+data$Actual_end_time <- 0 
 
 #loop through every patient to update times based on the previous patient's finish time
 for(i in 1:nrow(data)) {
   # check if it is the first patient of the dataset OR a new machine OR a new day (in these cases, the patient starts exactly on their scheduled time)
   if(i == 1 || data$MRI[i] != data$MRI[i-1] || data$Day_treatment[i] != data$Day_treatment[i-1]) {
-    data$Actual_Start_Time[i] <- data$Start_time_treatment[i]
+    data$Actual_start_time[i] <- data$Start_time_treatment[i]
   } else {
     # otherwise, they start at the LATER of: A) their scheduled time or B) when the previous patient actually finished (the ripple effect)
-    data$Actual_Start_Time[i] <- max(data$Start_time_treatment[i], data$Actual_End_Time[i-1])
+    data$Actual_start_time[i] <- max(data$Start_time_treatment[i], data$Actual_end_time[i-1])
   }
   
   #calculate their actual finish time based on the actual start + random duration
-  data$Actual_End_Time[i] <- data$Actual_Start_Time[i] + data$duration[i]
+  data$Actual_End_Time[i] <- data$Actual_start_time[i] + data$duration[i]
 }
 
 #calculate final performance metrics
 final_data <- data %>%
   mutate(
     #calculate waiting room delay (difference between actual start and scheduled start)
-    Waiting_Room_Delay = Actual_Start_Time - Start_time_treatment,
+    Waiting_room_delay = Actual_start_time - Start_time_treatment,
     #check for overtime (did they finish after 17.00?)
-    Is_Overtime = Actual_End_Time > 17.0,
+    Is_overtime = Actual_end_time > 17.0,
     #calculate how many hours of overtime occurred
-    Overtime_Amount = pmax(0, Actual_End_Time - 17.0),
+    Overtime_amount = pmax(0, Actual_end_time - 17.0),
     #the number of days the patient waited for the appointment
-    Access_Time_Days = Day_treatment - Day_called
+    Access_time_days = Day_treatment - Day_called
   )
 
 #calculate daily stats
 daily_performance <- final_data %>%
   group_by(MRI, Day_treatment) %>%
   summarise(
-    Total_Work_Hours = sum(duration),
-    Last_Patient_Finish = max(Actual_End_Time),
-    Daily_Overtime = pmax(0, Last_Patient_Finish - 17.0),
+    Total_work_hours = sum(duration),
+    Last_patient_finish = max(Actual_end_time),
+    Daily_overtime = pmax(0, Last_Patient_Finish - 17.0),
     .groups = "drop"
   )
