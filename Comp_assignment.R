@@ -7,7 +7,14 @@ set.seed(67)
 
 case_data <- read_csv("ScanRecords.csv")
 
+##### PATIENT TYPE 1 #####
+
 data_p1 <- case_data[case_data$PatientType == "Type 1", ]
+
+summary(data_p1[c(3)])
+date_counts <- table(data_p1$Date)
+summary(as.numeric(date_counts))
+length(as.numeric(date_counts))
 
 #1 will refer to scan times
 #2 will refer to number per patients
@@ -28,15 +35,29 @@ for (i in 1:B){
   bootstrap_sd[i] <- sd(bootstrap_sample)
 }
 
-hist(bootstrap_means)
-hist(bootstrap_sd)
-
 mean1 <- mean(bootstrap_means)
 sd1 <- mean(bootstrap_sd)
 
 mean1*60
 sd1*60
 #this is the amount of minutes it takes to scan on average and the sd
+hist(bootstrap_means)
+abline(v = mean(bootstrap_means), col = "black", lty = 1, lwd = 2)
+abline(v = mean(bootstrap_means)+(1.96*sd(bootstrap_means)),
+       col = "red", lty = 2, lwd = 2)
+abline(v = mean(bootstrap_means)-(1.96*sd(bootstrap_means)),
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.65)
+hist(bootstrap_sd)
+abline(v = mean(bootstrap_sd), col = "black", lty = 1, lwd = 2)
+abline(v = mean(bootstrap_sd)+(1.96*sd(bootstrap_sd)),
+       col = "red", lty = 2, lwd = 2)
+abline(v = mean(bootstrap_sd)-(1.96*sd(bootstrap_sd)),
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.61)
+#Note using quantiles for CI does not make a meaningful difference.
 
 data_p1$Date <- as.Date(data_p1$Date)
 
@@ -100,32 +121,36 @@ if (length(pair_sums) >= length(neg_indices)) {
   # The remaining negative values stay as they are (or you could set to NA)
 }
 
+summary(X)
+length(X)
+
 for (i in 1:B){
   bootstrap_sample <- rexp(length(X), rate = 1/mean(X))  
   bootstrap_means[i] <- mean(bootstrap_sample)
   bootstrap_sd[i] <- sd(bootstrap_sample)
 }
 
-hist(bootstrap_means)
-hist(bootstrap_sd)
-
 mean2 <- mean(bootstrap_means)
-sd2 <- mean(bootstrap_sd)
 
 mean2*60
-sd2*60
 
+hist(bootstrap_means)
+ci <- quantile(bootstrap_means, c(0.025, 0.975))
+abline(v = mean(bootstrap_means), col = "black", lty = 1, lwd = 2)
+abline(v = ci[1], col = "red", lty = 2, lwd = 2)
+abline(v = ci[2],
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.65)
 
-
-
-
-
-
-
-
-
+##### PATIENT TYPE 2 #####
 
 data_p2 <- case_data[case_data$PatientType == "Type 2", ]
+
+summary(data_p2[c(3)])
+date_counts <- table(data_p2$Date)
+summary(as.numeric(date_counts))
+length(as.numeric(date_counts))
 
 B <- 5000
 n <- nrow(data_p2)
