@@ -17,7 +17,7 @@ data_type2_hour <- data_type2$Time
 data_type2_duration <- data_type2$Duration
   
 #parameters to test the code
-runs <- 50
+runs <- 500
 days <- 21
 begin_day <- 8.0
 end_day <- 17.0
