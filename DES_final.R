@@ -313,13 +313,12 @@ results <- map_dfr(1:runs, function(r){
       Avg_Overtime_amount = mean(Overtime_amount)
     ) 
   
-  tibble(run = r, KPI = names(pooled_kpi), pooled = as.numeric(pooled_kpi), separate = as.numeric(separate_kpi))%>%
-    mutate(difference=pooled-separate)
+  tibble(run = r, KPI = names(pooled_kpi), pooled = as.numeric(pooled_kpi), separate = as.numeric(separate_kpi),difference = as.numeric(pooled_kpi) - as.numeric(separate_kpi))
 })
 
 results
 
 summary <- results %>%
   group_by(KPI) %>%
-  summarise(mean_pooled= mean(pooled), mean_separate = mean(separate), mean_difference = mean(difference), lb_interval = quantile(difference, 0.025),ub_interval = quantile(difference, 0.975), P_pooled_better = mean(difference <0))
+  summarise(mean_pooled= mean(pooled), mean_separate = mean(separate), mean_difference = mean(difference), lb_interval = quantile(difference, 0.025),ub_interval = quantile(difference, 0.975), P_pooled_better = round(mean(difference <0)*100, 1))
 summary
