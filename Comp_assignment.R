@@ -131,6 +131,8 @@ for (i in 1:B){
 }
 
 mean2 <- mean(bootstrap_means)
+sd2 <- mean(bootstrap_sd)
+#Time in hours between 2 arrivals.
 
 mean2*60
 
@@ -166,15 +168,21 @@ for (i in 1:B){
 }
 
 hist(bootstrap_means)
-hist(bootstrap_sd)
+
+ci <- quantile(bootstrap_means, c(0.025, 0.975))
+abline(v = mean(bootstrap_means), col = "black", lty = 1, lwd = 2)
+abline(v = ci[1], col = "red", lty = 2, lwd = 2)
+abline(v = ci[2],
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.50)
 
 mean3 <- mean(bootstrap_means)
-sd3 <- mean(bootstrap_sd)
 mean3*60
+sd3 <- mean(bootstrap_sd)
 sd3*60
 
 plot(ecdf(bootstrap_means))
-plot(ecdf(bootstrap_sd))
 
 unique_dates <- unique(data_p2$Date)
 
@@ -253,3 +261,83 @@ sd4*60
 
 plot(ecdf(bootstrap_means))
 plot(ecdf(bootstrap_sd))
+
+##### Monte Carlo sim #####
+
+X <- rnorm(100, mean = 0, sd = 1)
+
+M <- 1500
+n <- length(X)
+B <- 10000
+alpha <- 0.05
+mu <- 0
+sigma <- 1
+
+bootstrap_means <- 1:B
+bootstrap_sd <- 1:B
+
+est_bootstrap_means <- 1:M
+est_bootstrap_sd <- 1:M
+est_bootstrap_means_se <- 1:M
+est_bootstrap_sd_se <- 1:M
+
+reject <- rep(0, times = M)
+
+
+for (m in 1:M) {
+  X_m <- rnorm(100, mean = 0, sd = 1)
+  sample_means <- mean(X_m)
+  sample_sd <- sd(X_m)
+  Q <- sqrt(n)*sample_means / sample_sd
+  Q_sd <- (n-1) * sample_sd^2 / sigma^2
+
+  Q.star <- rep(NA, times = B)
+  for (b in 1:B){
+  bootstrap_sample <- sample(X_m, n, replace = TRUE)
+  bootstrap_means[b] <- mean(bootstrap_sample)
+  bootstrap_sd[b] <- sd(bootstrap_sample)
+  Q.star[b] <- sqrt(n)*(bootstrap_means[b] - sample_means) / bootstrap_sd[b]
+  }
+  cv.star <- quantile(Q.star, probs = 1-alpha)
+  ## Step 3: Evaluate ##
+  if (Q > cv.star) {reject[m] <- 1}							# Check if the null hypothesis is rejected
+}
+ERF <- mean(reject)	
+
+
+if (mu == 0) {
+  print(paste("Size using bootstrap:", ERF))
+} else if (mu > 0) {
+  print(paste("Power using bootstrap:", ERF))
+}
+
+
+
+
+
+for (m in 1:M) {
+  
+  ## Step 1: Generate sample
+  X_m <- rnorm(n, mean = mu, sd = sigma)
+  sample_sd <- sd(X_m)
+  est_bootstrap_sd[m] <- sample_sd
+  
+  ## Step 2: Bootstrap
+  for (b in 1:B) {
+    bootstrap_sample <- sample(X_m, n, replace = TRUE)
+    bootstrap_sd[b] <- sd(bootstrap_sample)
+  }
+  
+  ## Step 3: Bootstrap percentile CI for sigma
+  cv.lower <- quantile(bootstrap_sd, probs = alpha / 2)
+  cv.upper <- quantile(bootstrap_sd, probs = 1 - alpha / 2)
+  
+  ## Step 4: Evaluate
+  if (sigma < cv.lower || sigma > cv.upper) {
+    reject[m] <- 1
+  }
+}
+
+ERF <- mean(reject)
+
+print(paste("Rejection frequency of bootstrap SD:", ERF))
