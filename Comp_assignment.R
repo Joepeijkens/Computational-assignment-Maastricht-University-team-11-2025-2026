@@ -311,28 +311,22 @@ if (mu == 0) {
   print(paste("Power using bootstrap:", ERF))
 }
 
-
-
-
+#Sim SD Monte carlo#
 
 for (m in 1:M) {
   
-  ## Step 1: Generate sample
   X_m <- rnorm(n, mean = mu, sd = sigma)
   sample_sd <- sd(X_m)
   est_bootstrap_sd[m] <- sample_sd
   
-  ## Step 2: Bootstrap
   for (b in 1:B) {
     bootstrap_sample <- sample(X_m, n, replace = TRUE)
     bootstrap_sd[b] <- sd(bootstrap_sample)
   }
   
-  ## Step 3: Bootstrap percentile CI for sigma
   cv.lower <- quantile(bootstrap_sd, probs = alpha / 2)
   cv.upper <- quantile(bootstrap_sd, probs = 1 - alpha / 2)
   
-  ## Step 4: Evaluate
   if (sigma < cv.lower || sigma > cv.upper) {
     reject[m] <- 1
   }
@@ -341,3 +335,4 @@ for (m in 1:M) {
 ERF <- mean(reject)
 
 print(paste("Rejection frequency of bootstrap SD:", ERF))
+
