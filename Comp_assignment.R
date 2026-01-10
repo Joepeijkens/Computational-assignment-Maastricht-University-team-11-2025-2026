@@ -175,7 +175,17 @@ abline(v = ci[1], col = "red", lty = 2, lwd = 2)
 abline(v = ci[2],
        col = "red", lty = 2, lwd = 2)
 legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
-       col = c("black", "red"), lty = c(2,2), cex = 0.50)
+       col = c("black", "red"), lty = c(2,2), cex = 0.55)
+
+hist(bootstrap_sd)
+
+ci <- quantile(bootstrap_sd, c(0.025, 0.975))
+abline(v = mean(bootstrap_sd), col = "black", lty = 1, lwd = 2)
+abline(v = ci[1], col = "red", lty = 2, lwd = 2)
+abline(v = ci[2],
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.65)
 
 mean3 <- mean(bootstrap_means)
 mean3*60
@@ -251,7 +261,21 @@ for (i in 1:B){
 }
 
 hist(bootstrap_means)
+ci <- quantile(bootstrap_means, c(0.025, 0.975))
+abline(v = mean(bootstrap_means), col = "black", lty = 1, lwd = 2)
+abline(v = ci[1], col = "red", lty = 2, lwd = 2)
+abline(v = ci[2],
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.65)
 hist(bootstrap_sd)
+ci <- quantile(bootstrap_sd, c(0.025, 0.975))
+abline(v = mean(bootstrap_sd), col = "black", lty = 1, lwd = 2)
+abline(v = ci[1], col = "red", lty = 2, lwd = 2)
+abline(v = ci[2],
+       col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("Mean bootstraps", "95% confidence interval"), 
+       col = c("black", "red"), lty = c(2,2), cex = 0.65)
 
 mean4 <- mean(bootstrap_means)
 sd4 <- mean(bootstrap_sd)
@@ -272,14 +296,10 @@ B <- 10000
 alpha <- 0.05
 mu <- 0
 sigma <- 1
+est_bootstrap_sd <- 1:1500
 
 bootstrap_means <- 1:B
 bootstrap_sd <- 1:B
-
-est_bootstrap_means <- 1:M
-est_bootstrap_sd <- 1:M
-est_bootstrap_means_se <- 1:M
-est_bootstrap_sd_se <- 1:M
 
 reject <- rep(0, times = M)
 
@@ -311,22 +331,24 @@ if (mu == 0) {
   print(paste("Power using bootstrap:", ERF))
 }
 
-#Sim SD Monte carlo#
-
 for (m in 1:M) {
   
+  ## Step 1: Generate sample
   X_m <- rnorm(n, mean = mu, sd = sigma)
   sample_sd <- sd(X_m)
   est_bootstrap_sd[m] <- sample_sd
   
+  ## Step 2: Bootstrap
   for (b in 1:B) {
     bootstrap_sample <- sample(X_m, n, replace = TRUE)
     bootstrap_sd[b] <- sd(bootstrap_sample)
   }
   
+  ## Step 3: Bootstrap percentile CI for sigma
   cv.lower <- quantile(bootstrap_sd, probs = alpha / 2)
   cv.upper <- quantile(bootstrap_sd, probs = 1 - alpha / 2)
   
+  ## Step 4: Evaluate
   if (sigma < cv.lower || sigma > cv.upper) {
     reject[m] <- 1
   }
@@ -335,4 +357,3 @@ for (m in 1:M) {
 ERF <- mean(reject)
 
 print(paste("Rejection frequency of bootstrap SD:", ERF))
-
